@@ -279,7 +279,8 @@ export const exportToBackend = async (
   appState: AppState,
   files: BinaryFiles,
 ) => {
-  const json_id = appState.json_id;
+  // @ts-ignore
+  const json_id = window.JSON_ID;
   const title = json_id
     ? ""
     : window.prompt("What would you like to call this drawing?");
@@ -327,7 +328,8 @@ export const exportToBackend = async (
     );
     const json = await response.json();
     if (json.id) {
-      // TODO need to persist json_id.
+      // @ts-ignore
+      window.JSON_ID = json.id;
       const url = new URL(window.location.href);
       // We need to store the key (and less importantly the id) as hash instead
       // of queryParam in order to never send it to the server

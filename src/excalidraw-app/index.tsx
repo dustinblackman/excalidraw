@@ -121,6 +121,11 @@ const initializeScene = async (opts: {
   let roomLinkData = getCollaborationLinkData(window.location.href);
   const isExternalScene = !!(id || jsonBackendMatch || roomLinkData);
   if (isExternalScene) {
+    if (jsonBackendMatch) {
+      // @ts-ignore
+      window.JSON_ID = jsonBackendMatch[1];
+    }
+
     if (
       // don't prompt if scene is empty
       !scene.elements.length ||
@@ -130,9 +135,6 @@ const initializeScene = async (opts: {
       window.confirm(t("alerts.loadSceneOverridePrompt"))
     ) {
       if (jsonBackendMatch) {
-        if (localDataState.appState) {
-          localDataState.appState.json_id = jsonBackendMatch[1];
-        }
         scene = await loadScene(jsonBackendMatch[1], localDataState);
       }
       scene.scrollToContent = true;
