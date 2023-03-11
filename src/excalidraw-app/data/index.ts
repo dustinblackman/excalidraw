@@ -337,6 +337,7 @@ export const exportToBackend = async (
       const urlString = url.toString();
 
       console.log("URL", urlString);
+      window.alert("Saved!");
       // window.prompt(`🔒${t("alerts.uploadedSecurly")}`, urlString);
     } else if (json.error_class === "RequestTooLargeError") {
       window.alert(t("alerts.couldNotCreateShareableLinkTooBig"));
