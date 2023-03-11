@@ -1,4 +1,5 @@
-import { compressData, decompressData } from "../../data/encode";
+import { canvasToBlob } from "../../data/blob";
+import { decompressData } from "../../data/encode";
 import {
   decryptData,
   generateEncryptionKey,
@@ -8,23 +9,12 @@ import { serializeAsJSON } from "../../data/json";
 import { restore } from "../../data/restore";
 import { ImportedDataState } from "../../data/types";
 import { isInvisiblySmallElement } from "../../element/sizeHelpers";
-import { isInitializedImageElement } from "../../element/typeChecks";
-import { ExcalidrawElement, FileId } from "../../element/types";
+import { ExcalidrawElement } from "../../element/types";
 import { t } from "../../i18n";
-import {
-  AppState,
-  BinaryFileData,
-  BinaryFiles,
-  UserIdleState,
-} from "../../types";
+import { exportToCanvas } from "../../scene/export";
+import { AppState, BinaryFiles, UserIdleState } from "../../types";
 import { bytesToHexString } from "../../utils";
-import {
-  DELETED_ELEMENT_TIMEOUT,
-  FILE_UPLOAD_MAX_BYTES,
-  ROOM_ID_BYTES,
-} from "../app_constants";
-import { encodeFilesForUpload } from "./FileManager";
-import { saveFilesToFirebase } from "./firebase";
+import { DELETED_ELEMENT_TIMEOUT, ROOM_ID_BYTES } from "../app_constants";
 
 export type SyncableExcalidrawElement = ExcalidrawElement & {
   _brand: "SyncableExcalidrawElement";
@@ -205,12 +195,11 @@ const legacy_decodeFromBackend = async ({
   };
 };
 
-const importFromBackend = async (
-  id: string,
-  decryptionKey: string,
-): Promise<ImportedDataState> => {
+const importFromBackend = async (id: string): Promise<ImportedDataState> => {
   try {
-    const response = await fetch(`${BACKEND_V2_GET}${id}`);
+    const response = await fetch(
+      `${new URL(window.location.href).origin}/outline/get/${id}`,
+    );
 
     if (!response.ok) {
       window.alert(t("alerts.importBackendFailed"));
@@ -219,26 +208,20 @@ const importFromBackend = async (
     const buffer = await response.arrayBuffer();
 
     try {
-      const { data: decodedBuffer } = await decompressData(
-        new Uint8Array(buffer),
-        {
-          decryptionKey,
-        },
-      );
       const data: ImportedDataState = JSON.parse(
-        new TextDecoder().decode(decodedBuffer),
+        new TextDecoder().decode(buffer),
       );
 
       return {
         elements: data.elements || null,
-        appState: data.appState || null,
+        appState: data.appState || null, // TODO need to persist.
       };
     } catch (error: any) {
       console.warn(
         "error when decoding shareLink data using the new format:",
         error,
       );
-      return legacy_decodeFromBackend({ buffer, decryptionKey });
+      return legacy_decodeFromBackend({ buffer, decryptionKey: "" });
     }
   } catch (error: any) {
     window.alert(t("alerts.importBackendFailed"));
@@ -249,18 +232,17 @@ const importFromBackend = async (
 
 export const loadScene = async (
   id: string | null,
-  privateKey: string | null,
   // Supply local state even if importing from backend to ensure we restore
   // localStorage user settings which we do not persist on server.
   // Non-optional so we don't forget to pass it even if `undefined`.
   localDataState: ImportedDataState | undefined | null,
 ) => {
   let data;
-  if (id != null && privateKey != null) {
+  if (id != null) {
     // the private key is used to decrypt the content from the server, take
     // extra care not to leak it
     data = restore(
-      await importFromBackend(id, privateKey),
+      await importFromBackend(id),
       localDataState?.appState,
       localDataState?.elements,
       { repairBindings: true },
@@ -282,52 +264,78 @@ export const loadScene = async (
   };
 };
 
+const blobToBase64 = (blob: any) => {
+  const reader = new FileReader();
+  reader.readAsDataURL(blob);
+  return new Promise((resolve) => {
+    reader.onloadend = () => {
+      resolve(reader.result);
+    };
+  });
+};
+
 export const exportToBackend = async (
   elements: readonly ExcalidrawElement[],
   appState: AppState,
   files: BinaryFiles,
 ) => {
-  const encryptionKey = await generateEncryptionKey("string");
-
-  const payload = await compressData(
-    new TextEncoder().encode(
-      serializeAsJSON(elements, appState, files, "database"),
-    ),
-    { encryptionKey },
-  );
+  const json_id = appState.json_id;
+  const title = json_id
+    ? ""
+    : window.prompt("What would you like to call this drawing?");
+  const json_export = serializeAsJSON(elements, appState, files, "database");
 
   try {
-    const filesMap = new Map<FileId, BinaryFileData>();
-    for (const element of elements) {
-      if (isInitializedImageElement(element) && files[element.fileId]) {
-        filesMap.set(element.fileId, files[element.fileId]);
-      }
-    }
+    // TODO come back to this.
+    // const filesMap = new Map<FileId, BinaryFileData>();
+    // for (const element of elements) {
+    // if (isInitializedImageElement(element) && files[element.fileId]) {
+    // filesMap.set(element.fileId, files[element.fileId]);
+    // }
+    // }
 
-    const filesToUpload = await encodeFilesForUpload({
-      files: filesMap,
-      encryptionKey,
-      maxBytes: FILE_UPLOAD_MAX_BYTES,
-    });
+    // const filesToUpload = await encodeFilesForUpload({
+    // files: filesMap,
+    // encryptionKey,
+    // maxBytes: FILE_UPLOAD_MAX_BYTES,
+    // });
 
-    const response = await fetch(BACKEND_V2_POST, {
-      method: "POST",
-      body: payload.buffer,
-    });
+    const canvas = await exportToCanvas(
+      elements,
+      appState,
+      {},
+      {
+        exportBackground: appState.exportBackground,
+        viewBackgroundColor: appState.viewBackgroundColor,
+        exportPadding: 10,
+      },
+    );
+    const blob = await canvasToBlob(canvas);
+    const png_base64 = await blobToBase64(blob);
+
+    const response: any = await fetch(
+      `${new URL(window.location.href).origin}/outline/add`,
+      {
+        method: "POST",
+        body: JSON.stringify({
+          id: json_id,
+          title,
+          json: JSON.parse(json_export),
+          png: png_base64,
+        }),
+      },
+    );
     const json = await response.json();
     if (json.id) {
+      // TODO need to persist json_id.
       const url = new URL(window.location.href);
       // We need to store the key (and less importantly the id) as hash instead
       // of queryParam in order to never send it to the server
-      url.hash = `json=${json.id},${encryptionKey}`;
+      url.hash = `json=${json.id}`;
       const urlString = url.toString();
 
-      await saveFilesToFirebase({
-        prefix: `/files/shareLinks/${json.id}`,
-        files: filesToUpload,
-      });
-
-      window.prompt(`🔒${t("alerts.uploadedSecurly")}`, urlString);
+      console.log("URL", urlString);
+      // window.prompt(`🔒${t("alerts.uploadedSecurly")}`, urlString);
     } else if (json.error_class === "RequestTooLargeError") {
       window.alert(t("alerts.couldNotCreateShareableLinkTooBig"));
     } else {

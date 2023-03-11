@@ -206,6 +206,7 @@ export type AppState = {
   pendingImageElementId: ExcalidrawImageElement["id"] | null;
   showHyperlinkPopup: false | "info" | "editor";
   selectedLinearElement: LinearElementEditor | null;
+  json_id?: string;
 };
 
 export type NormalizedZoomValue = number & { _brand: "normalizedZoom" };

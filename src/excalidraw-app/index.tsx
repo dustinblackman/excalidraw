@@ -108,7 +108,7 @@ const initializeScene = async (opts: {
   const searchParams = new URLSearchParams(window.location.search);
   const id = searchParams.get("id");
   const jsonBackendMatch = window.location.hash.match(
-    /^#json=([a-zA-Z0-9_-]+),([a-zA-Z0-9_-]+)$/,
+    /^#json=([a-zA-Z0-9_-]+)$/,
   );
   const externalUrlMatch = window.location.hash.match(/^#url=(.*)$/);
 
@@ -116,7 +116,7 @@ const initializeScene = async (opts: {
 
   let scene: RestoredDataState & {
     scrollToContent?: boolean;
-  } = await loadScene(null, null, localDataState);
+  } = await loadScene(null, localDataState);
 
   let roomLinkData = getCollaborationLinkData(window.location.href);
   const isExternalScene = !!(id || jsonBackendMatch || roomLinkData);
@@ -130,11 +130,10 @@ const initializeScene = async (opts: {
       window.confirm(t("alerts.loadSceneOverridePrompt"))
     ) {
       if (jsonBackendMatch) {
-        scene = await loadScene(
-          jsonBackendMatch[1],
-          jsonBackendMatch[2],
-          localDataState,
-        );
+        if (localDataState.appState) {
+          localDataState.appState.json_id = jsonBackendMatch[1];
+        }
+        scene = await loadScene(jsonBackendMatch[1], localDataState);
       }
       scene.scrollToContent = true;
       if (!roomLinkData) {

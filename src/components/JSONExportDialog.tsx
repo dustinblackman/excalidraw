@@ -64,17 +64,16 @@ const JSONExportModal = ({
         {onExportToBackend && (
           <Card color="pink">
             <div className="Card-icon">{LinkIcon}</div>
-            <h2>{t("exportDialog.link_title")}</h2>
-            <div className="Card-details">{t("exportDialog.link_details")}</div>
+            <h2>Outline</h2>
+            <div className="Card-details">{"Export to Outline note"}</div>
             <ToolButton
               className="Card-button"
               type="button"
-              title={t("exportDialog.link_button")}
-              aria-label={t("exportDialog.link_button")}
+              title={"Export to Outline"}
+              aria-label={"Export to Outline"}
               showAriaLabel={true}
               onClick={() => {
                 onExportToBackend(elements, appState, files, canvas);
-                trackEvent("export", "link", `ui (${getFrame()})`);
               }}
             />
           </Card>
