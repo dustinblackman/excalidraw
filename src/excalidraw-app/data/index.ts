@@ -9,13 +9,18 @@ import { serializeAsJSON } from "../../data/json";
 import { restore } from "../../data/restore";
 import { ImportedDataState } from "../../data/types";
 import { isInvisiblySmallElement } from "../../element/sizeHelpers";
-import { ExcalidrawElement } from "../../element/types";
+import { ExcalidrawElement, FileId } from "../../element/types";
 import { t } from "../../i18n";
 import { exportToCanvas } from "../../scene/export";
-import { AppState, BinaryFiles, UserIdleState } from "../../types";
+import {
+  AppState,
+  BinaryFiles,
+  UserIdleState,
+  BinaryFileData,
+} from "../../types";
 import { bytesToHexString } from "../../utils";
 import { DELETED_ELEMENT_TIMEOUT, ROOM_ID_BYTES } from "../app_constants";
-
+import { isInitializedImageElement } from "../../element/typeChecks";
 export type SyncableExcalidrawElement = ExcalidrawElement & {
   _brand: "SyncableExcalidrawElement";
 };
@@ -286,21 +291,28 @@ export const exportToBackend = async (
     : window.prompt("What would you like to call this drawing?");
   const json_export = serializeAsJSON(elements, appState, files, "database");
 
+  async function saveFilesToOutline() {
+    const filesMap = new Map<FileId, BinaryFileData>();
+    for (const element of elements) {
+      if (isInitializedImageElement(element) && files[element.fileId]) {
+        filesMap.set(element.fileId, files[element.fileId]);
+      }
+    }
+
+    if (filesMap.size === 0) {
+      return;
+    }
+
+    await fetch(`${new URL(window.location.href).origin}/outline/files/add`, {
+      method: "POST",
+      body: JSON.stringify({
+        id: json_id,
+        data: Object.fromEntries(filesMap),
+      }),
+    });
+  }
+
   try {
-    // TODO come back to this.
-    // const filesMap = new Map<FileId, BinaryFileData>();
-    // for (const element of elements) {
-    // if (isInitializedImageElement(element) && files[element.fileId]) {
-    // filesMap.set(element.fileId, files[element.fileId]);
-    // }
-    // }
-
-    // const filesToUpload = await encodeFilesForUpload({
-    // files: filesMap,
-    // encryptionKey,
-    // maxBytes: FILE_UPLOAD_MAX_BYTES,
-    // });
-
     const canvas = await exportToCanvas(
       elements,
       appState,
@@ -335,6 +347,7 @@ export const exportToBackend = async (
       // of queryParam in order to never send it to the server
       url.hash = `json=${json.id}`;
       const urlString = url.toString();
+      await saveFilesToOutline();
 
       console.log("URL", urlString);
       window.alert("Saved!");

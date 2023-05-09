@@ -106,7 +106,10 @@ export class FileManager {
     loadedFiles: BinaryFileData[];
     erroredFiles: Map<FileId, true>;
   }> => {
-    if (!ids.length) {
+    // @ts-ignore
+    const json_id = window.JSON_ID;
+
+    if (!ids.length || !json_id) {
       return {
         loadedFiles: [],
         erroredFiles: new Map(),
@@ -117,16 +120,21 @@ export class FileManager {
     }
 
     try {
-      const { loadedFiles, erroredFiles } = await this._getFiles(ids);
+      const response = await fetch(
+        `${new URL(window.location.href).origin}/outline/files/get/${json_id}`,
+        {
+          method: "GET",
+        },
+      );
 
-      for (const file of loadedFiles) {
+      const json = await response.json();
+      const binary_files = Object.values(json) as BinaryFileData[];
+
+      for (const file of binary_files) {
         this.savedFiles.set(file.id, true);
       }
-      for (const [fileId] of erroredFiles) {
-        this.erroredFiles.set(fileId, true);
-      }
 
-      return { loadedFiles, erroredFiles };
+      return { loadedFiles: binary_files, erroredFiles: new Map() };
     } finally {
       for (const id of ids) {
         this.fetchingFiles.delete(id);
